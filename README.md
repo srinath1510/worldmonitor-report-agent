@@ -390,7 +390,7 @@ This repo inherits WorldMonitor's [AGPL-3.0](LICENSE) license.
 - Geopolitical intelligence platform for real-time monitoring
 
 **Agent Layer:**
-- Built by [@srinathsrinivasan](https://github.com/srinathsrinivasan)
+- Built by us
 - Claude Sonnet 4.5 synthesis agent for trading signals
 
 ---
