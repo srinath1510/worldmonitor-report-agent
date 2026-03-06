@@ -1,0 +1,4 @@
+# Agent synthesizer and delivery dependencies
+anthropic
+supabase
+python-dotenv
