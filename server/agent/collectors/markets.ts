@@ -1,4 +1,4 @@
-import { db } from '../storage/db';
+import { db, fetchRecentSnapshots } from '../storage/db';
 import { listMarketQuotes } from '../../worldmonitor/market/v1/list-market-quotes';
 import { computeMarketsDelta } from '../delta/markets';
 
@@ -15,7 +15,24 @@ export async function collectMarkets() {
         const response = await listMarketQuotes({} as any, { symbols });
 
         if (!response?.quotes?.length) {
-            throw new Error('No quotes returned from Yahoo/Finnhub');
+            console.warn('Yahoo Finance returned no quotes (likely rate limited)');
+            // Fallback: fetch from previous snapshot and mark as stale
+            const recent = await fetchRecentSnapshots('markets', 1);
+            if (recent.length > 0) {
+                const prev = recent[0];
+                const payload = {
+                    ...prev.payload,
+                    _stale: true,
+                    _stale_reason: 'Yahoo Finance rate limited - using cached data',
+                    _stale_age_hours: Math.round((Date.now() - new Date(prev.collected_at).getTime()) / 3600000)
+                };
+                console.log(`Using cached market data from ${new Date(prev.collected_at).toISOString()}`);
+                // Re-run delta with stale flag
+                const { deltas, anomalies } = await computeMarketsDelta(payload);
+                await db.save_snapshot('markets', payload, deltas, { ...anomalies, data_stale: true });
+                return { payload, deltas, anomalies };
+            }
+            throw new Error('No quotes returned and no cached data available');
         }
 
         const payload: Record<string, any> = {};
@@ -29,10 +46,11 @@ export async function collectMarkets() {
         const { deltas, anomalies } = await computeMarketsDelta(payload);
 
         await db.save_snapshot('markets', payload, deltas, anomalies);
+        console.log('✓ Markets data collected successfully');
         return { payload, deltas, anomalies };
     } catch (error: any) {
-        console.error('Failed to collect markets:', error.message);
-        await db.save_snapshot('markets', { error: error.message }, {}, {});
+        console.error('✗ Failed to collect markets:', error.message);
+        await db.save_snapshot('markets', { error: error.message, _failed: true }, {}, {});
         return { payload: { error: error.message } };
     }
 }

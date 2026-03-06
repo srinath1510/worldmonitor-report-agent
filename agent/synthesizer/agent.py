@@ -34,12 +34,19 @@ def run_synthesis() -> str:
 
     client = anthropic.Anthropic(api_key=api_key)
 
+    # Detect if running during market hours (9:30am - 4pm ET)
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    is_intraday = 9 <= now_et.hour < 16 and now_et.weekday() < 5
+
     # Build the system prompt with today's calendar injected statically
     calendar_ctx = build_calendar_context()
-    system_prompt = build_system_prompt(calendar_ctx)
+    system_prompt = build_system_prompt(calendar_ctx, is_intraday=is_intraday)
 
+    prompt_context = "intraday market update" if is_intraday else "morning briefing"
     messages: list[dict] = [
-        {"role": "user", "content": "Generate today's morning briefing."}
+        {"role": "user", "content": f"Generate today's {prompt_context}."}
     ]
 
     max_turns = 10  # safety cap against runaway loops
@@ -47,7 +54,7 @@ def run_synthesis() -> str:
     for turn in range(max_turns):
         response = client.messages.create(
             model="claude-sonnet-4-5",
-            max_tokens=2000,
+            max_tokens=4096,  # Increased for comprehensive trading analysis
             system=system_prompt,
             tools=TOOLS,
             messages=messages,
